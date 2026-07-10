@@ -1,0 +1,38 @@
+{
+    "name": "pelican-marketplace/plugin-marketplace",
+    "description": "Browse, install, update and manage Minecraft plugins from Hangar, Modrinth and SpigotMC without leaving the Pelican panel.",
+    "type": "pelican-plugin",
+    "license": "MIT",
+    "keywords": ["pelican", "pelican-plugin", "minecraft", "plugins", "hangar", "modrinth", "spigot"],
+    "require": {
+        "php": "^8.3 || ^8.4 || ^8.5",
+        "ext-zip": "*"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "pestphp/pest": "^3.0 || ^4.0",
+        "mockery/mockery": "^1.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "PelicanMarketplace\\PluginMarketplace\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PelicanMarketplace\\PluginMarketplace\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "pint": "pint --config=../pint.json"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,23 @@
+{
+    "id": "plugin-marketplace",
+    "name": "Plugin Marketplace",
+    "author": "Pelican Community",
+    "version": "1.0.0",
+    "description": "Browse, install, update and manage Minecraft plugins from Hangar, Modrinth and SpigotMC without ever leaving the panel.",
+    "category": "plugin",
+    "url": "https://github.com/pelican-eggs/plugin-marketplace",
+    "update_url": null,
+    "namespace": "PelicanMarketplace\\PluginMarketplace",
+    "class": "PluginMarketplacePlugin",
+    "panels": [
+        "admin",
+        "server"
+    ],
+    "panel_version": "^1.0.0-beta1",
+    "composer_packages": null,
+    "meta": {
+        "status": "not_installed",
+        "status_message": null,
+        "load_order": 0
+    }
+}
