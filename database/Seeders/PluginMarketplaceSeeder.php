@@ -27,7 +27,21 @@ use Throwable;
  */
 class PluginMarketplaceSeeder extends Seeder
 {
-    private const SOURCE_DIRECTIVE = "@source '../../plugins/*/resources/views/**/*.blade.php';";
+    // Deliberately the fully-qualified path for this one plugin, not a
+    // `plugins/*/...` wildcard: confirmed in production that Tailwind's
+    // @source glob engine does not resolve a mid-path wildcard the same
+    // way the host's own working example does (which only wildcards at
+    // the very end, `**/*.blade.php`) - a canary utility class
+    // (`max-w-[10rem]`) present in this plugin's views had zero matches
+    // in the compiled CSS with the wildcard form, and was picked up
+    // correctly once switched to this explicit path.
+    private const SOURCE_DIRECTIVE = "@source '../../plugins/plugin-marketplace/resources/views/**/*.blade.php';";
+
+    // An earlier version of this seeder inserted this mid-path-wildcard
+    // form, which turned out not to work (see the comment above) - strip
+    // it out if a prior run left it behind, so app.css doesn't end up
+    // with both a dead line and the working one.
+    private const STALE_SOURCE_DIRECTIVE = "@source '../../plugins/*/resources/views/**/*.blade.php';";
 
     public function run(PluginService $pluginService): void
     {
@@ -43,22 +57,31 @@ class PluginMarketplaceSeeder extends Seeder
         }
 
         $contents = File::get($path);
+        $hasCorrectDirective = str_contains($contents, self::SOURCE_DIRECTIVE);
+        $hasStaleDirective = str_contains($contents, self::STALE_SOURCE_DIRECTIVE);
 
-        if (str_contains($contents, self::SOURCE_DIRECTIVE)) {
+        if ($hasCorrectDirective && !$hasStaleDirective) {
             return;
         }
 
         try {
             $lines = explode("\n", $contents);
-            $insertAt = count($lines);
 
-            foreach ($lines as $index => $line) {
-                if (str_starts_with(trim($line), '@source') || str_starts_with(trim($line), '@import')) {
-                    $insertAt = $index + 1;
-                }
+            if ($hasStaleDirective) {
+                $lines = array_values(array_filter($lines, fn (string $line) => trim($line) !== self::STALE_SOURCE_DIRECTIVE));
             }
 
-            array_splice($lines, $insertAt, 0, [self::SOURCE_DIRECTIVE]);
+            if (!$hasCorrectDirective) {
+                $insertAt = count($lines);
+
+                foreach ($lines as $index => $line) {
+                    if (str_starts_with(trim($line), '@source') || str_starts_with(trim($line), '@import')) {
+                        $insertAt = $index + 1;
+                    }
+                }
+
+                array_splice($lines, $insertAt, 0, [self::SOURCE_DIRECTIVE]);
+            }
 
             File::put($path, implode("\n", $lines));
 
