@@ -71,13 +71,13 @@ class Marketplace extends Page
         }
     }
 
-    public function results(MarketplaceSearchService $search): MarketplaceSearchResultData
+    public function results(): MarketplaceSearchResultData
     {
         if ($this->favoritesOnly) {
             return $this->favoritesAsResult();
         }
 
-        return $search->search(new MarketplaceSearchQuery(
+        return app(MarketplaceSearchService::class)->search(new MarketplaceSearchQuery(
             term: $this->search,
             repositories: array_map(fn (string $r) => MarketplaceRepository::from($r), $this->repositories),
             categories: $this->category ? [$this->category] : [],
