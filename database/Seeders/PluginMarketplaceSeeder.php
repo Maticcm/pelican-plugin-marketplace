@@ -24,24 +24,21 @@ use Throwable;
  * plugin's views (hover states, tinted backgrounds, translucent
  * borders) silently compile to nothing, and the pages render
  * essentially unstyled. See docs/ARCHITECTURE.md.
+ *
+ * Uses an *absolute* filesystem path in the `@source` directive
+ * rather than a path relative to app.css, deliberately: relative
+ * `@source` resolution is confirmed to behave differently between
+ * Tailwind's CLI and its `@tailwindcss/vite` plugin (see
+ * https://github.com/tailwindlabs/tailwindcss/issues/18833), and two
+ * different relative forms were both confirmed in production, via a
+ * `max-w-[10rem]` canary utility class present in this plugin's views,
+ * to compile to nothing under the Vite plugin used here. An absolute
+ * path sidesteps that ambiguity entirely.
  */
 class PluginMarketplaceSeeder extends Seeder
 {
-    // Deliberately the fully-qualified path for this one plugin, not a
-    // `plugins/*/...` wildcard: confirmed in production that Tailwind's
-    // @source glob engine does not resolve a mid-path wildcard the same
-    // way the host's own working example does (which only wildcards at
-    // the very end, `**/*.blade.php`) - a canary utility class
-    // (`max-w-[10rem]`) present in this plugin's views had zero matches
-    // in the compiled CSS with the wildcard form, and was picked up
-    // correctly once switched to this explicit path.
-    private const SOURCE_DIRECTIVE = "@source '../../plugins/plugin-marketplace/resources/views/**/*.blade.php';";
-
-    // An earlier version of this seeder inserted this mid-path-wildcard
-    // form, which turned out not to work (see the comment above) - strip
-    // it out if a prior run left it behind, so app.css doesn't end up
-    // with both a dead line and the working one.
-    private const STALE_SOURCE_DIRECTIVE = "@source '../../plugins/*/resources/views/**/*.blade.php';";
+    /** Matches any @source line this seeder (in any prior version) may have added, so it can be normalized/replaced. */
+    private const SOURCE_LINE_PATTERN = '/^@source\s+[\'"].*plugin-marketplace\/resources\/views\/\*\*\/\*\.blade\.php[\'"];\s*$/m';
 
     public function run(PluginService $pluginService): void
     {
@@ -56,34 +53,33 @@ class PluginMarketplaceSeeder extends Seeder
             return;
         }
 
-        $contents = File::get($path);
-        $hasCorrectDirective = str_contains($contents, self::SOURCE_DIRECTIVE);
-        $hasStaleDirective = str_contains($contents, self::STALE_SOURCE_DIRECTIVE);
+        $directive = "@source '" . plugin_path('plugin-marketplace', 'resources/views') . "/**/*.blade.php';";
 
-        if ($hasCorrectDirective && !$hasStaleDirective) {
+        $contents = File::get($path);
+
+        if (str_contains($contents, $directive) && preg_match_all(self::SOURCE_LINE_PATTERN, $contents) === 1) {
+            // Already patched with exactly this directive and nothing
+            // stale left behind - nothing to do.
             return;
         }
 
         try {
-            $lines = explode("\n", $contents);
+            // Remove any previous attempt (this seeder has shipped more
+            // than one @source form while the correct one was being
+            // worked out) before inserting the current, known-good one.
+            $withoutStaleLines = preg_replace(self::SOURCE_LINE_PATTERN, '', $contents) ?? $contents;
+            $lines = array_values(array_filter(explode("\n", $withoutStaleLines), fn (string $line) => trim($line) !== ''));
 
-            if ($hasStaleDirective) {
-                $lines = array_values(array_filter($lines, fn (string $line) => trim($line) !== self::STALE_SOURCE_DIRECTIVE));
-            }
-
-            if (!$hasCorrectDirective) {
-                $insertAt = count($lines);
-
-                foreach ($lines as $index => $line) {
-                    if (str_starts_with(trim($line), '@source') || str_starts_with(trim($line), '@import')) {
-                        $insertAt = $index + 1;
-                    }
+            $insertAt = count($lines);
+            foreach ($lines as $index => $line) {
+                if (str_starts_with(trim($line), '@source') || str_starts_with(trim($line), '@import')) {
+                    $insertAt = $index + 1;
                 }
-
-                array_splice($lines, $insertAt, 0, [self::SOURCE_DIRECTIVE]);
             }
 
-            File::put($path, implode("\n", $lines));
+            array_splice($lines, $insertAt, 0, [$directive]);
+
+            File::put($path, implode("\n", $lines) . "\n");
 
             // The install flow already ran `yarn build` before seeders
             // run, using the *old* CSS. Rebuild once more now that the
@@ -94,9 +90,8 @@ class PluginMarketplaceSeeder extends Seeder
             $pluginService->buildAssets();
         } catch (Throwable $exception) {
             Log::warning(
-                '[plugin-marketplace] Could not register the Tailwind @source directive automatically in resources/css/app.css. '
-                . 'The plugin will still work, but some styling may be missing until this is added manually: '
-                . self::SOURCE_DIRECTIVE,
+                "[plugin-marketplace] Could not register the Tailwind @source directive automatically in resources/css/app.css. "
+                . "The plugin will still work, but some styling may be missing until this is added manually: $directive",
                 ['exception' => $exception->getMessage()]
             );
         }
