@@ -105,14 +105,10 @@ Every install/update/uninstall/scan runs as a queued job (`ShouldQueue` + `Shoul
 
 ## CSS/Tailwind note
 
-This plugin's Blade views live under `plugins/plugin-marketplace/resources/views/`, outside the host panel's own `resources/` tree. The host's `vite.config.js` already globs `plugins/*/resources/{css,js}/**/*` as build *inputs*, but Tailwind v4's automatic content-detection may still skip scanning `plugins/*/resources/views/**/*.blade.php` for class usage, since `plugins/.gitignore` (`*` + `!.gitignore`) is the kind of path Tailwind's scanner treats as ignorable by default - the host's own `resources/css/app.css` works around this exact situation for a vendor package via an explicit `@source` directive. To avoid depending on a host-side edit, this plugin's own Blade views:
+This plugin's Blade views live under `plugins/plugin-marketplace/resources/views/`, outside the host panel's own `resources/` tree. The host's `vite.config.js` already globs `plugins/*/resources/{css,js}/**/*` as build *inputs*, but Tailwind v4's automatic content-detection skips scanning `plugins/*/resources/views/**/*.blade.php` for class usage - `plugins/.gitignore` (`*` + `!.gitignore`) causes Tailwind's default scanner to treat the whole `plugins/` tree as out of scope. This was confirmed in production, not just a theoretical risk: most non-trivial utility classes this plugin's views used (hover states, tinted backgrounds, translucent borders) compiled to nothing, and the pages rendered essentially unstyled.
 
-- Use only very common Tailwind utility classes (flex/grid/spacing/color/border/shadow), which are near-certain to already be present in Filament's own pre-compiled CSS bundle (Filament ships a complete utility set independent of the host app's Tailwind scan) rather than relying on the host app's build to (re-)generate them.
-- Avoid `@tailwindcss/typography`'s `.prose` classes entirely (not used anywhere else in the host app, so genuinely at risk of being purged) in favor of a small hand-written `<style>` block scoped under `.pm-content`.
-- Replace `line-clamp-*` utilities the same way, via `.pm-clamp-2`/`.pm-clamp-3`.
+**Fix**: `database/Seeders/PluginMarketplaceSeeder.php` runs automatically on every `p:plugin:install`/`p:plugin:update` (Pelican's plugin system auto-invokes a seeder named `<PluginName>Seeder` - see `App\Models\Plugin::getSeeder()`). It idempotently appends an `@source` directive to the host's `resources/css/app.css`, mirroring the pattern already used there for a vendor package's views, then triggers one more `yarn build` (the install flow's own build already ran *before* seeders, using the old CSS, so this second build is what actually picks up the new directive). If the host file is missing or unwritable, it logs a warning and leaves the plugin otherwise fully functional rather than failing the install.
 
-If you notice any styling gap after installing, the fix is a one-line addition to the host's `resources/css/app.css` mirroring the existing vendor `@source` line:
-
-```css
-@source '../../plugins/*/resources/views/**/*.blade.php';
-```
+A couple of things are still hand-written CSS rather than Tailwind utilities, kept even after the `@source` fix since they have zero build-pipeline dependency either way:
+- `@tailwindcss/typography`'s `.prose` classes are avoided in favor of a small `<style>` block scoped under `.pm-content`, for rendering third-party plugin descriptions.
+- `line-clamp-*` utilities are replaced the same way, via `.pm-clamp-2`/`.pm-clamp-3`.
