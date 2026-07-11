@@ -26,10 +26,17 @@ class MarketplaceSearchService
 
     public function search(MarketplaceSearchQuery $query): MarketplaceSearchResultData
     {
-        $repositories = array_intersect(
+        // array_intersect() casts every element to a string to compare
+        // them, and MarketplaceRepository (a pure backed enum) has no
+        // __toString(), so intersecting two arrays of enum instances
+        // directly throws. Compare by ->value instead.
+        $enabledRepositories = array_map(fn ($client) => $client->repository(), $this->clients->enabled());
+        $enabledValues = array_map(fn (MarketplaceRepository $r) => $r->value, $enabledRepositories);
+
+        $repositories = array_values(array_filter(
             $query->repositoriesOrAll(),
-            array_map(fn ($client) => $client->repository(), $this->clients->enabled())
-        );
+            fn (MarketplaceRepository $r) => in_array($r->value, $enabledValues, true)
+        ));
 
         $merged = MarketplaceSearchResultData::empty($query->page, $query->perPage);
 
